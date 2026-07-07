@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:ai.google.dev)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:discuss.ai.google.dev)",
+      "WebFetch(domain:firebase.google.com)",
+      "Bash(gh repo *)",
+      "WebFetch(domain:www.yape.com.pe)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Admin\\\\AndroidStudioProjects\\\\TuGasto\" -Recurse -Filter \"*.kt\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -First 10)"
+    ]
+  }
+}
