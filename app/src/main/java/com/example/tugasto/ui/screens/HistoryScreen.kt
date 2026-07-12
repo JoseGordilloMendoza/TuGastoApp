@@ -254,18 +254,6 @@ private fun dayLabel(timestamp: Long): String {
     }
 }
 
-private fun iconForName(name: String): ImageVector = when (name) {
-    "local_dining" -> Icons.Default.LocalDining
-    "directions_bus" -> Icons.Default.DirectionsBus
-    "electric_bolt" -> Icons.Default.ElectricBolt
-    "confirmation_number" -> Icons.Default.ConfirmationNumber
-    "health_and_safety" -> Icons.Default.HealthAndSafety
-    "school" -> Icons.Default.School
-    "shopping_bag" -> Icons.Default.ShoppingBag
-    "home" -> Icons.Default.Home
-    "work" -> Icons.Default.Work
-    else -> Icons.Default.Category
-}
 
 private fun parseColor(hex: String): Color = try {
     val clean = hex.removePrefix("#")

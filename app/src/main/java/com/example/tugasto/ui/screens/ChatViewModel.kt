@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tugasto.BuildConfig
 import com.example.tugasto.data.local.dao.TuGastoDao
-import com.example.tugasto.data.local.entity.CategoryEntity
 import com.example.tugasto.data.local.entity.TransactionEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +33,9 @@ class ChatViewModel @Inject constructor(
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -41,14 +43,6 @@ class ChatViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            dao.insertCategories(
-                listOf(
-                    CategoryEntity(name = "Alimentación", iconName = "restaurant", colorHex = "#FF5722"),
-                    CategoryEntity(name = "Transporte", iconName = "directions_bus", colorHex = "#2196F3"),
-                    CategoryEntity(name = "Ocio", iconName = "movie", colorHex = "#9C27B0"),
-                    CategoryEntity(name = "Hogar", iconName = "home", colorHex = "#4CAF50")
-                )
-            )
             _messages.value = listOf(
                 ChatMessage(
                     text = "¡Hola! Soy tu Asistente TuGasto. Escribe tus gastos aquí.",
@@ -71,25 +65,56 @@ class ChatViewModel @Inject constructor(
     }
 
     private suspend fun processExpenseText(input: String) {
+        _isLoading.value = true
         try {
             val prompt = """
                 Eres un asistente de finanzas personales para usuarios peruanos.
-                El usuario escribe sus gastos en texto libre y tú debes extraer la información.
+                Extrae el monto y categoría de un gasto escrito en texto libre, incluyendo jerga peruana.
 
-                REGLAS:
-                - "soles", "sol", "S/", "PEN" significan la moneda peruana (no afectan el número)
-                - El monto es siempre un número positivo
-                - Si no hay monto claro, usa 0
-                - Categorías válidas: "Alimentación", "Transporte", "Ocio", "Hogar", "Otros"
+                MONEDA (no afectan el número base): "soles", "sol", "S/", "PEN", "pe", "pesos", "plata", "mosca", "pelos".
+                JERGA DE DENOMINACIONES PERUANAS:
+                - "luca"/"lucas" = 1 sol cada una → "cinco lucas"=5.0, "veinte lucas"=20.0, "una luca"=1.0
+                - "china" = 0.50 soles → "una china"=0.50, "dos chinas"=1.0
+                - "rojo" = 200 soles (el billete rojo) → "un rojo"=200.0, "medio rojo"=100.0
+                - "pelos" = soles → "diez pelos"=10.0, "quince pelos"=15.0
+                NÚMEROS ESCRITOS: "un"/"una"=1, "dos"=2, "tres"=3, "cuatro"=4, "cinco"=5, "seis"=6, "siete"=7, "ocho"=8, "nueve"=9, "diez"=10, "once"=11, "doce"=12, "trece"=13, "catorce"=14, "quince"=15, "dieciséis"=16, "veinte"=20, "veinticinco"=25, "treinta"=30, "cuarenta"=40, "cincuenta"=50, "sesenta"=60, "setenta"=70, "ochenta"=80, "noventa"=90, "cien"=100, "ciento"=1XX, "doscientos"=200.
+                MONTO: siempre positivo. Si no hay monto claro usa 0.
+                NO ES GASTO: "presté", "me devolvieron", "deposité", "retiro del banco", "transferí" → monto 0.
+
+                CATEGORÍAS y JERGA PERUANA:
+                "Alimentación": menú, menú del día, almuerzo, desayuno, cena, lonche, recreo, pollería, cevichería, ceviche, anticucho, chicharrón, papa a la huancaína, lomo saltado, pollo a la brasa, causa, sanguche, pan, panadería, bodega, mercado, feria, minimarket, delivery, pedido, rappi, yummy, chifa, chivito, combo, postre, café, jugos, gaseosa, agua, snack, fruta, verdura, choclo, arroz, fideos
+                "Transporte": pasaje, combi, micro, mototaxi, moto, taxi, uber, cabify, beat, indriver, colectivo, tren, metro, bus, combustible, gasolina, gasolinera, estacionamiento, peaje, cochera, bicicleta
+                "Servicios": luz, agua, gas, balón de gas, internet, cable, teléfono, recarga, saldo, movistar, claro, entel, bitel, alquiler, renta, mantenimiento, arbitrios, predial, seguro, banco, comisión
+                "Entretenimiento": cine, netflix, spotify, youtube premium, juego, videojuego, steam, salida, karaoke, discoteca, bar, tragos, cerveza, chela, fiesta, evento, concierto, partido, casino
+                "Salud": doctor, médico, clínica, hospital, farmacia, botica, medicina, pastilla, consulta, análisis, laboratorio, óptica, lentes, dentista, psicólogo
+                "Educación": colegio, universidad, instituto, curso, libro, fotocopia, impresión, útiles, lapicero, cuaderno, mochila, matrícula, pensión
+                "Ropa y Calzado": ropa, polo, camisa, pantalón, jean, zapatilla, zapato, sandalia, zapatillas, casaca, chompa, terno, vestido, cartera, billetera, accesorio
+                "Hogar": mercado, supermercado, limpieza, detergente, escoba, mueble, electrodoméstico, foco, pintura, plomero, técnico, arreglo
+                "Trabajo": herramienta, materiales, útiles de oficina, impresión, movilidad laboral
+                "Otros": regalo, propina, donación, multa, papeleta, tramite, notaría, mascota, veterinario
 
                 EJEMPLOS:
-                "comida 8 soles" → {"monto": 8.0, "categoria": "Alimentación"}
-                "pasaje 2.50" → {"monto": 2.50, "categoria": "Transporte"}
-                "almuerzo S/ 15" → {"monto": 15.0, "categoria": "Alimentación"}
-                "luz 120 soles" → {"monto": 120.0, "categoria": "Hogar"}
-                "cine 25" → {"monto": 25.0, "categoria": "Ocio"}
+                "menú 12" → {"monto": 12.0, "categoria": "Alimentación"}
+                "combi al centro 1.50" → {"monto": 1.50, "categoria": "Transporte"}
+                "recarga movistar veinte soles" → {"monto": 20.0, "categoria": "Servicios"}
+                "Netflix mensual 37.90" → {"monto": 37.90, "categoria": "Entretenimiento"}
+                "botica 45" → {"monto": 45.0, "categoria": "Salud"}
+                "pollería con la familia 85" → {"monto": 85.0, "categoria": "Alimentación"}
+                "indriver a la oficina 18" → {"monto": 18.0, "categoria": "Transporte"}
+                "balón de gas 50" → {"monto": 50.0, "categoria": "Servicios"}
+                "zapatillas nuevas ochenta" → {"monto": 80.0, "categoria": "Ropa y Calzado"}
+                "le presté a Juan cien soles" → {"monto": 0, "categoria": "Otros"}
+                "chelas con amigos 30" → {"monto": 30.0, "categoria": "Entretenimiento"}
+                "delivery rappi 25.50" → {"monto": 25.50, "categoria": "Alimentación"}
+                "mototaxi 3" → {"monto": 3.0, "categoria": "Transporte"}
+                "taxi cinco lucas" → {"monto": 5.0, "categoria": "Transporte"}
+                "menú quince pelos" → {"monto": 15.0, "categoria": "Alimentación"}
+                "le presté un rojo a mi hermano" → {"monto": 0, "categoria": "Otros"}
+                "combi una china" → {"monto": 0.50, "categoria": "Transporte"}
+                "compré ropa con veinte lucas" → {"monto": 20.0, "categoria": "Ropa y Calzado"}
 
-                Responde SOLO con el JSON, sin texto adicional, sin markdown.
+                Responde SOLO con JSON válido, sin texto adicional, sin markdown, sin explicaciones.
+                Formato exacto: {"monto": NUMBER, "categoria": "STRING"}
 
                 Texto del usuario: "$input"
             """.trimIndent()
@@ -166,6 +191,8 @@ class ChatViewModel @Inject constructor(
         } catch (e: Exception) {
             Log.e("TuGasto_Groq", "Error: ${e.message}", e)
             addAssistantMessage("Hubo un error procesando el mensaje. Intenta de nuevo.")
+        } finally {
+            _isLoading.value = false
         }
     }
 

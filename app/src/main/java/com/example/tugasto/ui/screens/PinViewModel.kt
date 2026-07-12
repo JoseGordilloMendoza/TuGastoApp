@@ -1,15 +1,20 @@
 package com.example.tugasto.ui.screens
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.tugasto.data.local.dao.TuGastoDao
 import com.example.tugasto.data.local.prefs.UserPreferencesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class PinViewModel @Inject constructor(
-    private val prefsRepository: UserPreferencesRepository
+    private val prefsRepository: UserPreferencesRepository,
+    private val dao: TuGastoDao
 ) : ViewModel() {
 
     enum class Mode { SETUP_ENTER, SETUP_CONFIRM, UNLOCK }
@@ -29,7 +34,7 @@ class PinViewModel @Inject constructor(
     private var pendingPin = ""
 
     val isPinSet: Boolean get() = prefsRepository.isPinSet()
-    val isBiometricEnabled: Boolean get() = prefsRepository.isBiometricEnabled()
+    val isBiometricEnabled: StateFlow<Boolean> = prefsRepository.isBiometricEnabled
 
     fun startSetup() {
         _mode.value = Mode.SETUP_ENTER
@@ -60,6 +65,23 @@ class PinViewModel @Inject constructor(
 
     fun disablePin() {
         prefsRepository.clearPin()
+    }
+
+    // ── Recuperación de PIN ───────────────────────────────────────────────────
+
+    fun resetPinOnly() {
+        prefsRepository.clearPin()
+    }
+
+    private val _nuclearResetComplete = MutableStateFlow(false)
+    val nuclearResetComplete: StateFlow<Boolean> = _nuclearResetComplete
+
+    fun nuclearReset() {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.deleteAllTransactions()
+            prefsRepository.clearPin()
+            _nuclearResetComplete.value = true
+        }
     }
 
     private fun processPin() {

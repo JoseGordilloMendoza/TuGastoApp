@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import java.util.Calendar
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -88,6 +89,25 @@ class AnalysisViewModel @Inject constructor(
             initialValue = emptyList()
         )
     
+    val vsLastMonthPercent: StateFlow<Double?> = run {
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.DAY_OF_MONTH, 1)
+        cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+        val thisMonthStart = cal.timeInMillis
+        cal.add(Calendar.MONTH, -1)
+        val lastMonthStart = cal.timeInMillis
+
+        combine(
+            dao.getTotalAmountFrom(thisMonthStart),
+            dao.getTotalAmountBetween(lastMonthStart, thisMonthStart)
+        ) { current, previous ->
+            val c = current ?: 0.0
+            val p = previous ?: 0.0
+            if (p > 0.0) ((c - p) / p) * 100.0 else null
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    }
+
     val pendingTransactions: StateFlow<List<TransactionEntity>> = dao.getPendingTransactions()
         .stateIn(
             scope = viewModelScope,

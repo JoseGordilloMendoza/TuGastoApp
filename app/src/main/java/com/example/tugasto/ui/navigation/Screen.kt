@@ -17,6 +17,7 @@ sealed class Screen(val route: String, val title: String? = null, val icon: Imag
     object History : Screen("history")
     object PinLock : Screen("pin_lock")
     object PinSetup : Screen("pin_setup")
+    object Categories : Screen("categories")
 }
 
 val bottomNavItems = listOf(

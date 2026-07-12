@@ -92,6 +92,9 @@ class UserPreferencesRepository @Inject constructor(
     private val _isPinEnabled = MutableStateFlow(prefs.getString("pin_hash", null) != null)
     val isPinEnabled: StateFlow<Boolean> = _isPinEnabled.asStateFlow()
 
+    private val _isBiometricEnabled = MutableStateFlow(prefs.getBoolean("biometric_enabled", false))
+    val isBiometricEnabled: StateFlow<Boolean> = _isBiometricEnabled.asStateFlow()
+
     fun isPinSet(): Boolean = prefs.getString("pin_hash", null) != null
 
     fun savePin(pin: String) {
@@ -107,12 +110,22 @@ class UserPreferencesRepository @Inject constructor(
     fun clearPin() {
         prefs.edit().remove("pin_hash").remove("biometric_enabled").apply()
         _isPinEnabled.value = false
+        _isBiometricEnabled.value = false
     }
-
-    fun isBiometricEnabled(): Boolean = prefs.getBoolean("biometric_enabled", false)
 
     fun setBiometricEnabled(enabled: Boolean) {
         prefs.edit().putBoolean("biometric_enabled", enabled).apply()
+        _isBiometricEnabled.value = enabled
+    }
+
+    // ── Cloud banner ──────────────────────────────────────────────────────────
+
+    private val _cloudBannerDismissed = MutableStateFlow(prefs.getBoolean("cloud_banner_dismissed", false))
+    val cloudBannerDismissed: StateFlow<Boolean> = _cloudBannerDismissed.asStateFlow()
+
+    fun dismissCloudBanner() {
+        prefs.edit().putBoolean("cloud_banner_dismissed", true).apply()
+        _cloudBannerDismissed.value = true
     }
 
     private fun hashPin(pin: String): String =

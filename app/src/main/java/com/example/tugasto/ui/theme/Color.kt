@@ -31,10 +31,8 @@ val TuGastoGray900 = Color(0xFF111827)
 val TuGastoDark = Color(0xFF1E293B)
 val TuGastoDarkSurface = Color(0xFF0F172A)
 
-// Material theme seed colors
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+// Dark mode navy surfaces
+val TuGastoNavyDeep    = Color(0xFF0B1120)  // background
+val TuGastoNavySurface = Color(0xFF131D30)  // surface (cards)
+val TuGastoNavyVariant = Color(0xFF1E2D4A)  // surfaceVariant (inputs, chips)
+val TuGastoNavyOutline = Color(0xFF334155)  // outline

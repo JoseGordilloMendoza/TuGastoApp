@@ -1,9 +1,19 @@
 package com.example.tugasto.ui.screens
 
+import android.graphics.Bitmap
+import android.graphics.Canvas as AndroidCanvas
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -26,15 +37,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -42,19 +54,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.tugasto.ui.theme.TuGastoBg
-import com.example.tugasto.ui.theme.TuGastoBlue
-import com.example.tugasto.ui.theme.TuGastoBlueExtraLight
-import com.example.tugasto.ui.theme.TuGastoGray100
-import com.example.tugasto.ui.theme.TuGastoGray400
-import com.example.tugasto.ui.theme.TuGastoGray200
-import com.example.tugasto.ui.theme.TuGastoGray500
-import com.example.tugasto.ui.theme.TuGastoGray900
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.tugasto.R
+import com.example.tugasto.ui.theme.TuGastoBlue
+import com.example.tugasto.ui.theme.TuGastoBlueExtraLight
 
 data class ChatMessage(
     val text: String,
@@ -63,13 +76,13 @@ data class ChatMessage(
     val confirmLabel: String = ""
 )
 
-private val initialMessages = listOf(
-    ChatMessage("Pasaje 2.50 S/", isUser = true, time = "10:28 AM"),
-    ChatMessage("✓ Registrado\nPasaje · Transporte · S/ 2.50", isUser = false, time = "10:28 AM", confirmLabel = "Transporte"),
-    ChatMessage("Menú 18.00 S/", isUser = true, time = "1:15 PM"),
-    ChatMessage("✓ Registrado\nMenú · Alimentación · S/ 18.00", isUser = false, time = "1:15 PM", confirmLabel = "Alimentación"),
-    ChatMessage("Cena 45.00 S/", isUser = true, time = "8:45 PM"),
-    ChatMessage("✓ Registrado\nCena · Alimentación · S/ 45.00", isUser = false, time = "8:45 PM", confirmLabel = "Alimentación"),
+private val quickSuggestions = listOf(
+    "Café 5 S/",
+    "Pasaje 2.50 S/",
+    "Almuerzo 15 S/",
+    "Mercado 50 S/",
+    "Farmacia 30 S/",
+    "Gasolina 100 S/"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -79,11 +92,24 @@ fun ChatScreen(
     viewModel: ChatViewModel = hiltViewModel()
 ) {
     val messages by viewModel.messages.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val context = LocalContext.current
 
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+    val appIconBitmap = remember {
+        val drawable = ContextCompat.getDrawable(context, R.mipmap.ic_tugasto_round)!!
+        val size = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 192
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val cvs = AndroidCanvas(bmp)
+        drawable.setBounds(0, 0, size, size)
+        drawable.draw(cvs)
+        bmp.asImageBitmap()
+    }
+
+    val scrollTarget = messages.size + if (isLoading) 1 else 0
+    LaunchedEffect(scrollTarget) {
+        if (scrollTarget > 0) listState.animateScrollToItem(scrollTarget - 1)
     }
 
     Column(
@@ -93,11 +119,22 @@ fun ChatScreen(
     ) {
         CenterAlignedTopAppBar(
             title = {
-                Text(
-                    text = "Asistente TuGasto",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Image(
+                        painter = BitmapPainter(appIconBitmap),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(28.dp).clip(CircleShape)
+                    )
+                    Text(
+                        "TuGasto IA",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             },
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                 containerColor = MaterialTheme.colorScheme.surface
@@ -118,12 +155,15 @@ fun ChatScreen(
                 Spacer(Modifier.height(12.dp))
             }
             items(messages) { msg ->
-                if (msg.isUser) {
-                    UserBubble(msg)
-                } else {
-                    AssistantBubble(msg)
-                }
+                if (msg.isUser) UserBubble(msg)
+                else AssistantBubble(msg, appIconBitmap)
                 Spacer(Modifier.height(2.dp))
+            }
+            if (isLoading) {
+                item {
+                    Spacer(Modifier.height(2.dp))
+                    TypingIndicatorBubble(appIconBitmap)
+                }
             }
             item { Spacer(Modifier.height(8.dp)) }
         }
@@ -136,7 +176,8 @@ fun ChatScreen(
                     viewModel.sendMessage(inputText)
                     inputText = ""
                 }
-            }
+            },
+            onChipClick = { inputText = it }
         )
     }
 }
@@ -161,7 +202,7 @@ private fun DateIndicator(label: String) {
 @Composable
 private fun UserBubble(msg: ChatMessage) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 48.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 56.dp),
         horizontalArrangement = Arrangement.End
     ) {
         Column(horizontalAlignment = Alignment.End) {
@@ -189,45 +230,33 @@ private fun UserBubble(msg: ChatMessage) {
 }
 
 @Composable
-private fun AssistantBubble(msg: ChatMessage) {
+private fun AssistantBubble(msg: ChatMessage, iconBitmap: ImageBitmap) {
     val isConfirmed = msg.confirmLabel.isNotBlank()
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(end = 48.dp),
+        modifier = Modifier.fillMaxWidth().padding(end = 56.dp),
         horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.Bottom
     ) {
-        // Avatar TuGasto
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(CircleShape)
-                .background(TuGastoBlue),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "TG",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 10.sp
-                )
-            )
-        }
+        Image(
+            painter = BitmapPainter(iconBitmap),
+            contentDescription = "TuGasto",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(34.dp).clip(CircleShape)
+        )
         Spacer(Modifier.width(8.dp))
         Column {
             Box(
                 modifier = Modifier
                     .widthIn(max = 260.dp)
                     .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp))
-                    .background(
-                        if (isConfirmed) TuGastoBlueExtraLight
-                        else MaterialTheme.colorScheme.surfaceVariant
-                    )
+                    .background(if (isConfirmed) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
                     .padding(horizontal = 16.dp, vertical = 11.dp)
             ) {
                 Column {
                     Text(
                         text = msg.text,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = if (isConfirmed) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
                         style = MaterialTheme.typography.bodyMedium
                     )
                     if (isConfirmed) {
@@ -260,51 +289,138 @@ private fun AssistantBubble(msg: ChatMessage) {
 }
 
 @Composable
+private fun TypingIndicatorBubble(iconBitmap: ImageBitmap) {
+    val transition = rememberInfiniteTransition(label = "typing")
+
+    val dot1 by transition.animateFloat(
+        initialValue = 0.25f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            tween(450, easing = LinearEasing), RepeatMode.Reverse
+        ), label = "d1"
+    )
+    val dot2 by transition.animateFloat(
+        initialValue = 0.25f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            tween(450, delayMillis = 150, easing = LinearEasing), RepeatMode.Reverse
+        ), label = "d2"
+    )
+    val dot3 by transition.animateFloat(
+        initialValue = 0.25f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            tween(450, delayMillis = 300, easing = LinearEasing), RepeatMode.Reverse
+        ), label = "d3"
+    )
+
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(end = 56.dp),
+        horizontalArrangement = Arrangement.Start,
+        verticalAlignment = Alignment.Bottom
+    ) {
+        Image(
+            painter = BitmapPainter(iconBitmap),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(34.dp).clip(CircleShape)
+        )
+        Spacer(Modifier.width(8.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(horizontal = 18.dp, vertical = 15.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf(dot1, dot2, dot3).forEach { alpha ->
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha))
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun MessageInputBar(
     text: String,
     onTextChange: (String) -> Unit,
-    onSend: () -> Unit
+    onSend: () -> Unit,
+    onChipClick: (String) -> Unit
 ) {
+    val canSend = text.isNotBlank()
+
     Surface(
         shadowElevation = 8.dp,
         color = MaterialTheme.colorScheme.surface
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = text,
-                onValueChange = onTextChange,
-                modifier = Modifier.weight(1f),
-                placeholder = {
-                    Text(
-                        "Escribe tu gasto... ej: café 8 S/",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                },
-                shape = RoundedCornerShape(24.dp),
-                maxLines = 3,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                )
-            )
-            Spacer(Modifier.width(10.dp))
-            IconButton(
-                onClick = onSend,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape),
-                colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
+        Column {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(Icons.Default.Send, contentDescription = "Enviar")
+                items(quickSuggestions, key = { it }) { suggestion ->
+                    SuggestionChip(
+                        onClick = { onChipClick(suggestion) },
+                        label = {
+                            Text(suggestion, style = MaterialTheme.typography.labelMedium)
+                        },
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = TuGastoBlue.copy(alpha = 0.08f),
+                            labelColor = TuGastoBlue
+                        )
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 14.dp, top = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextField(
+                    value = text,
+                    onValueChange = onTextChange,
+                    modifier = Modifier.weight(1f),
+                    placeholder = {
+                        Text(
+                            "Escribe tu gasto... ej: café 8 S/",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+                    shape = RoundedCornerShape(24.dp),
+                    maxLines = 3,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent
+                    )
+                )
+                Spacer(Modifier.width(10.dp))
+                IconButton(
+                    onClick = onSend,
+                    enabled = canSend,
+                    modifier = Modifier.size(48.dp).clip(CircleShape),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = TuGastoBlue,
+                        contentColor = Color.White,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Icon(Icons.Default.Send, contentDescription = "Enviar")
+                }
             }
         }
     }

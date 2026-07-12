@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Lightbulb
@@ -92,6 +93,7 @@ fun AnalysisScreen(
 ) {
     val estimatedExpense by viewModel.estimatedExpense.collectAsState()
     val estimatedBalance by viewModel.estimatedBalance.collectAsState()
+    val vsLastMonthPercent by viewModel.vsLastMonthPercent.collectAsState()
     val aiReport by viewModel.aiReport.collectAsState()
     val emergencyFundGoal by viewModel.emergencyFundGoal.collectAsState()
     val currentSavings by viewModel.currentSavings.collectAsState()
@@ -129,8 +131,10 @@ fun AnalysisScreen(
                 item { Spacer(Modifier.height(4.dp)) }
 
             item {
+                val monthName = java.text.SimpleDateFormat("MMMM", java.util.Locale("es", "PE"))
+                    .format(java.util.Date()).uppercase()
                 Text(
-                    "PRONÓSTICO DE MARZO",
+                    "PRONÓSTICO DE $monthName",
                     style = MaterialTheme.typography.labelSmall.copy(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         letterSpacing = 1.sp,
@@ -139,9 +143,9 @@ fun AnalysisScreen(
                 )
             }
 
-            item { ProjectionCard(estimatedExpense, estimatedBalance) }
+            item { ProjectionCard(estimatedExpense, estimatedBalance, vsLastMonthPercent) }
 
-            item { EmergencyFundCard(emergencyFundGoal, currentSavings) }
+            item { EmergencyFundCard(emergencyFundGoal, currentSavings, onAjustarMetas = onNavigateToProfile) }
 
             if (!isAutoDetectionEnabled) {
                 item {
@@ -245,7 +249,9 @@ fun AnalysisScreen(
 }
 
 @Composable
-private fun ProjectionCard(estimatedExpense: Double, estimatedBalance: Double) {
+private fun ProjectionCard(estimatedExpense: Double, estimatedBalance: Double, vsLastMonth: Double?) {
+    val balancePositive = estimatedBalance >= 0
+
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -253,7 +259,7 @@ private fun ProjectionCard(estimatedExpense: Double, estimatedBalance: Double) {
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(modifier = Modifier.fillMaxWidth()) {
-                // Left: Estimated expense
+                // Izquierda: proyección de gasto
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         "Proyección a fin de mes",
@@ -268,30 +274,40 @@ private fun ProjectionCard(estimatedExpense: Double, estimatedBalance: Double) {
                         )
                     )
                     Spacer(Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(TuGastoRedLight)
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.ArrowUpward,
-                            contentDescription = null,
-                            tint = TuGastoRed,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(Modifier.width(3.dp))
+                    if (vsLastMonth != null) {
+                        val isUp = vsLastMonth >= 0
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isUp) TuGastoRedLight else TuGastoGreenLight)
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                if (isUp) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                                contentDescription = null,
+                                tint = if (isUp) TuGastoRed else TuGastoGreenDark,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(Modifier.width(3.dp))
+                            Text(
+                                "${String.format(java.util.Locale.US, "%.0f", kotlin.math.abs(vsLastMonth))}% vs mes ant.",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    color = if (isUp) TuGastoRed else TuGastoGreenDark,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            )
+                        }
+                    } else {
                         Text(
-                            "+5% vs mes ant.",
+                            "Sin datos del mes anterior",
                             style = MaterialTheme.typography.labelSmall.copy(
-                                color = TuGastoRed, fontWeight = FontWeight.SemiBold
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         )
                     }
                 }
 
-                // Divider
                 Box(
                     modifier = Modifier
                         .width(1.dp)
@@ -300,11 +316,9 @@ private fun ProjectionCard(estimatedExpense: Double, estimatedBalance: Double) {
                         .align(Alignment.CenterVertically)
                 )
 
-                // Right: Estimated balance
+                // Derecha: saldo estimado
                 Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 16.dp)
+                    modifier = Modifier.weight(1f).padding(start = 16.dp)
                 ) {
                     Text(
                         "Saldo estimado",
@@ -315,21 +329,22 @@ private fun ProjectionCard(estimatedExpense: Double, estimatedBalance: Double) {
                         "S/ ${String.format(java.util.Locale.US, "%.2f", estimatedBalance)}",
                         style = MaterialTheme.typography.headlineMedium.copy(
                             fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = if (balancePositive) MaterialTheme.colorScheme.onSurface else TuGastoRed
                         )
                     )
                     Spacer(Modifier.height(6.dp))
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(TuGastoGreenLight)
+                            .background(if (balancePositive) TuGastoGreenLight else TuGastoRedLight)
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "Dentro del plan",
+                            if (balancePositive) "Dentro del plan" else "Sobre el presupuesto",
                             style = MaterialTheme.typography.labelSmall.copy(
-                                color = TuGastoGreenDark, fontWeight = FontWeight.SemiBold
+                                color = if (balancePositive) TuGastoGreenDark else TuGastoRed,
+                                fontWeight = FontWeight.SemiBold
                             )
                         )
                     }
@@ -350,7 +365,7 @@ private fun ProjectionCard(estimatedExpense: Double, estimatedBalance: Double) {
 
 
 @Composable
-private fun EmergencyFundCard(goal: Double, savings: Double) {
+private fun EmergencyFundCard(goal: Double, savings: Double, onAjustarMetas: () -> Unit = {}) {
     val progress = if (goal > 0) (savings / goal).toFloat().coerceIn(0f, 1f) else 0f
     val percentStr = "${String.format(java.util.Locale.US, "%.0f", progress * 100)}%"
 
@@ -390,7 +405,7 @@ private fun EmergencyFundCard(goal: Double, savings: Double) {
                 strokeCap = StrokeCap.Round
             )
             Spacer(Modifier.height(10.dp))
-            TextButton(onClick = {}, modifier = Modifier.align(Alignment.End)) {
+            TextButton(onClick = onAjustarMetas, modifier = Modifier.align(Alignment.End)) {
                 Text(
                     "Ajustar metas",
                     style = MaterialTheme.typography.labelMedium.copy(color = TuGastoBlue)
